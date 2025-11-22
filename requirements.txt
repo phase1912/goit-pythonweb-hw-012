@@ -11,4 +11,6 @@ passlib[bcrypt]
 python-jose[cryptography]
 python-multipart
 alembic
+fastapi-mail
+jinja2
 

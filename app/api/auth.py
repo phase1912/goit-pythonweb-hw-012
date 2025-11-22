@@ -1,4 +1,4 @@
-from fastapi import APIRouter, Depends, HTTPException, status
+from fastapi import APIRouter, Depends, HTTPException, status, BackgroundTasks
 from fastapi.security import OAuth2PasswordRequestForm
 from sqlalchemy.orm import Session
 from datetime import timedelta
@@ -6,9 +6,17 @@ from datetime import timedelta
 from app.db.database import get_db
 from app.services.user_service import UserService, UserAlreadyExistsError
 from app.schemas.user import UserCreate, UserResponse, Token, RefreshTokenRequest
-from app.core.security import create_access_token, create_refresh_token, decode_refresh_token, get_current_user
+from app.core.security import (
+    create_access_token,
+    create_refresh_token,
+    decode_refresh_token,
+    get_current_user,
+    create_email_verification_token,
+    verify_email_token
+)
 from app.core.config import settings
 from app.domain.user import User
+from app.services.email_service import send_verification_email
 
 router = APIRouter(prefix="/auth", tags=["auth"])
 
@@ -18,12 +26,23 @@ def get_user_service(db: Session = Depends(get_db)) -> UserService:
 
 
 @router.post("/register", response_model=UserResponse, status_code=status.HTTP_201_CREATED)
-def register(
+async def register(
     user_data: UserCreate,
+    background_tasks: BackgroundTasks,
     service: UserService = Depends(get_user_service)
 ):
     try:
         user = service.create_user(user_data)
+
+        verification_token = create_email_verification_token(user.email)
+
+        background_tasks.add_task(
+            send_verification_email,
+            user.email,
+            user.first_name or user.email.split('@')[0],
+            verification_token
+        )
+
         return user
     except UserAlreadyExistsError as e:
         raise HTTPException(
@@ -110,6 +129,62 @@ def logout(
     current_user: User = Depends(get_current_user),
     service: UserService = Depends(get_user_service)
 ):
-
     service.revoke_refresh_token(current_user.id)
     return None
+
+
+@router.get("/verify-email/{token}")
+async def verify_email(
+    token: str,
+    service: UserService = Depends(get_user_service)
+):
+    try:
+        email = verify_email_token(token)
+
+        user = service.confirm_email(email)
+        if not user:
+            raise HTTPException(
+                status_code=status.HTTP_404_NOT_FOUND,
+                detail="User not found"
+            )
+
+        return {
+            "message": "Email verified successfully",
+            "email": email
+        }
+    except HTTPException:
+        raise
+    except Exception as e:
+        raise HTTPException(
+            status_code=status.HTTP_400_BAD_REQUEST,
+            detail="Invalid or expired verification token"
+        )
+
+
+@router.post("/resend-verification")
+async def resend_verification_email(
+    email: str,
+    background_tasks: BackgroundTasks,
+    service: UserService = Depends(get_user_service)
+):
+    user = service.get_user_by_email(email)
+
+    if not user:
+        return {"message": "If the email exists, a verification email has been sent"}
+
+    if user.is_confirmed:
+        raise HTTPException(
+            status_code=status.HTTP_400_BAD_REQUEST,
+            detail="Email already verified"
+        )
+
+    verification_token = create_email_verification_token(user.email)
+
+    background_tasks.add_task(
+        send_verification_email,
+        user.email,
+        user.first_name or user.email.split('@')[0],
+        verification_token
+    )
+
+    return {"message": "Verification email sent"}

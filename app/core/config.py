@@ -8,6 +8,22 @@ class Settings(BaseSettings):
     access_token_expire_minutes: int = 30
     refresh_token_expire_days: int = 7
 
+    # Email settings
+    mail_username: str = "noreply@example.com"
+    mail_password: str = ""
+    mail_from: str = "noreply@example.com"
+    mail_port: int = 1025
+    mail_server: str = "localhost"
+    mail_from_name: str = "Contacts API"
+    mail_starttls: bool = True
+    mail_ssl_tls: bool = False
+    mail_use_credentials: bool = True
+    mail_validate_certs: bool = True
+
+    # Application URL
+    frontend_url: str = "http://localhost:3000"
+    backend_url: str = "http://localhost:8000"
+
     class Config:
         env_file = ".env"
 

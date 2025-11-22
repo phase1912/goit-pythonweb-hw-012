@@ -42,3 +42,5 @@ class UserService:
     def revoke_refresh_token(self, user_id: int) -> None:
         self.repository.clear_refresh_token(user_id)
 
+    def confirm_email(self, email: str) -> Optional[User]:
+        return self.repository.confirm_email(email)

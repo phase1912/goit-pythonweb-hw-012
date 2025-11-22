@@ -52,3 +52,10 @@ class UserRepository:
             user.refresh_token = None
             self.db.commit()
 
+    def confirm_email(self, email: str) -> Optional[User]:
+        user = self.get_by_email(email)
+        if user:
+            user.is_confirmed = True
+            self.db.commit()
+            self.db.refresh(user)
+        return user

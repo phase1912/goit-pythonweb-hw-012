@@ -75,6 +75,33 @@ def decode_refresh_token(token: str) -> str:
         )
 
 
+def create_email_verification_token(email: str) -> str:
+    to_encode = {"sub": email, "type": "email_verification"}
+    expire = datetime.utcnow() + timedelta(hours=24)
+    to_encode.update({"exp": expire})
+    encoded_jwt = jwt.encode(to_encode, settings.secret_key, algorithm=settings.algorithm)
+    return encoded_jwt
+
+
+def verify_email_token(token: str) -> str:
+    try:
+        payload = jwt.decode(token, settings.secret_key, algorithms=[settings.algorithm])
+        email: str = payload.get("sub")
+        token_type: str = payload.get("type")
+
+        if email is None or token_type != "email_verification":
+            raise HTTPException(
+                status_code=status.HTTP_400_BAD_REQUEST,
+                detail="Invalid verification token"
+            )
+        return email
+    except JWTError:
+        raise HTTPException(
+            status_code=status.HTTP_400_BAD_REQUEST,
+            detail="Invalid or expired verification token"
+        )
+
+
 def get_current_user(
     token: str = Depends(oauth2_scheme),
     db: Session = Depends(get_db)
@@ -99,4 +126,3 @@ def get_current_user(
         raise credentials_exception
 
     return user
-
