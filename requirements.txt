@@ -15,4 +15,6 @@ fastapi-mail
 jinja2
 slowapi
 redis
+cloudinary
+pillow
 

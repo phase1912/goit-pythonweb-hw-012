@@ -59,3 +59,11 @@ class UserRepository:
             self.db.commit()
             self.db.refresh(user)
         return user
+
+    def update_avatar(self, user_id: int, avatar_url: str) -> Optional[User]:
+        user = self.get_by_id(user_id)
+        if user:
+            user.avatar = avatar_url
+            self.db.commit()
+            self.db.refresh(user)
+        return user

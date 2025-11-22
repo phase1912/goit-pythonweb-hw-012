@@ -1,4 +1,4 @@
-from fastapi import APIRouter, Depends, HTTPException, status, BackgroundTasks, Request
+from fastapi import APIRouter, Depends, HTTPException, status, BackgroundTasks, Request, UploadFile, File
 from fastapi.security import OAuth2PasswordRequestForm
 from sqlalchemy.orm import Session
 from datetime import timedelta
@@ -19,6 +19,7 @@ from app.core.security import (
 from app.core.config import settings
 from app.domain.user import User
 from app.services.email_service import send_verification_email
+from app.services.cloudinary_service import cloudinary_service
 
 router = APIRouter(prefix="/auth", tags=["auth"])
 
@@ -202,3 +203,21 @@ async def read_users_me(
 ):
     return current_user
 
+
+@router.patch("/avatar", response_model=UserResponse)
+async def update_avatar(
+    file: UploadFile = File(...),
+    current_user: User = Depends(get_current_user),
+    service: UserService = Depends(get_user_service)
+):
+    avatar_url = await cloudinary_service.upload_avatar(file, current_user.id)
+
+    updated_user = service.update_avatar(current_user.id, avatar_url)
+
+    if not updated_user:
+        raise HTTPException(
+            status_code=status.HTTP_404_NOT_FOUND,
+            detail="User not found"
+        )
+
+    return updated_user

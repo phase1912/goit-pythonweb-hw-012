@@ -44,3 +44,6 @@ class UserService:
 
     def confirm_email(self, email: str) -> Optional[User]:
         return self.repository.confirm_email(email)
+
+    def update_avatar(self, user_id: int, avatar_url: str) -> Optional[User]:
+        return self.repository.update_avatar(user_id, avatar_url)
