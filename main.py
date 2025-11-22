@@ -6,6 +6,7 @@ from slowapi.errors import RateLimitExceeded
 
 from app.api.contacts import router as contacts_router
 from app.api.auth import router as auth_router
+from app.core.config import settings
 
 limiter = Limiter(key_func=get_remote_address)
 
@@ -20,10 +21,10 @@ app.add_exception_handler(RateLimitExceeded, _rate_limit_exceeded_handler)
 
 app.add_middleware(
     CORSMiddleware,
-    allow_origins=["*"],
-    allow_credentials=True,
-    allow_methods=["*"],
-    allow_headers=["*"],
+    allow_origins=settings.cors_origins,
+    allow_credentials=settings.cors_allow_credentials,
+    allow_methods=settings.cors_allow_methods,
+    allow_headers=settings.cors_allow_headers,
 )
 
 app.include_router(auth_router)
