@@ -22,7 +22,7 @@ if config.config_file_name is not None:
 # Import your models and settings
 from app.core.config import settings
 from app.domain.base import metadata_
-from app.domain import contact  # noqa: F401 - Import to register models
+from app.domain import contact, user  # noqa: F401 - Import to register models
 
 # Set the database URL from settings
 config.set_main_option("sqlalchemy.url", settings.database_url)

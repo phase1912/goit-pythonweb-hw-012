@@ -2,10 +2,11 @@ from fastapi import FastAPI
 from fastapi.middleware.cors import CORSMiddleware
 
 from app.api.contacts import router as contacts_router
+from app.api.auth import router as auth_router
 
 app = FastAPI(
     title="Contacts API",
-    description="API for managing contacts with CRUD operations",
+    description="API for managing contacts with CRUD operations and JWT authentication",
     version="1.0.0",
 )
 
@@ -17,6 +18,7 @@ app.add_middleware(
     allow_headers=["*"],
 )
 
+app.include_router(auth_router)
 app.include_router(contacts_router)
 
 

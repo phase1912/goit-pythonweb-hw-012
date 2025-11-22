@@ -1,3 +1,4 @@
+bcrypt
 psycopg2-binary
 pydantic-settings
 python-dotenv
@@ -6,4 +7,8 @@ uvicorn[standard]
 email-validator
 sqlalchemy
 requests
+passlib[bcrypt]
+python-jose[cryptography]
+python-multipart
+alembic
 

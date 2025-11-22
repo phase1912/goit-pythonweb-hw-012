@@ -1,0 +1,34 @@
+from typing import Optional
+from sqlalchemy.orm import Session
+
+from app.domain.user import User
+from app.schemas.user import UserCreate
+from app.core.security import get_password_hash
+
+
+class UserRepository:
+    def __init__(self, db: Session):
+        self.db = db
+
+    def create(self, user_data: UserCreate) -> User:
+        hashed_password = get_password_hash(user_data.password)
+        user = User(
+            email=user_data.email,
+            first_name=user_data.first_name,
+            last_name=user_data.last_name,
+            hashed_password=hashed_password
+        )
+        self.db.add(user)
+        self.db.commit()
+        self.db.refresh(user)
+        return user
+
+    def get_by_id(self, user_id: int) -> Optional[User]:
+        return self.db.query(User).filter(User.id == user_id).first()
+
+    def get_by_email(self, email: str) -> Optional[User]:
+        return self.db.query(User).filter(User.email == email).first()
+
+    def exists_by_email(self, email: str) -> bool:
+        return self.db.query(User).filter(User.email == email).first() is not None
+
