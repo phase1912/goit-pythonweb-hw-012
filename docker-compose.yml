@@ -12,6 +12,13 @@ services:
       - "5432:5432"
     volumes:
       - postgres_data:/var/lib/postgresql/data
+    networks:
+      - contacts_network
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U postgres"]
+      interval: 10s
+      timeout: 5s
+      retries: 5
     restart: unless-stopped
 
   mailhog:
@@ -20,7 +27,76 @@ services:
     ports:
       - "1025:1025"  # SMTP server
       - "8025:8025"  # Web UI
+    networks:
+      - contacts_network
     restart: unless-stopped
+
+  api:
+    build:
+      context: .
+      dockerfile: Dockerfile
+    container_name: contacts_api
+    environment:
+      # Database
+      DATABASE_URL: postgresql://postgres:postgres@db:5432/contacts_db
+
+      # JWT
+      SECRET_KEY: ${SECRET_KEY}
+      ALGORITHM: HS256
+      ACCESS_TOKEN_EXPIRE_MINUTES: 30
+      REFRESH_TOKEN_EXPIRE_DAYS: 7
+
+      # Email (MailHog)
+      MAIL_USERNAME: test@example.com
+      MAIL_PASSWORD: ""
+      MAIL_FROM: noreply@contactsapi.com
+      MAIL_PORT: 1025
+      MAIL_SERVER: mailhog
+      MAIL_FROM_NAME: Contacts API
+      MAIL_STARTTLS: "False"
+      MAIL_SSL_TLS: "False"
+      MAIL_USE_CREDENTIALS: "False"
+      MAIL_VALIDATE_CERTS: "False"
+
+      # Application URLs
+      FRONTEND_URL: http://localhost:3000
+      BACKEND_URL: http://localhost:8000
+
+      # CORS
+      CORS_ORIGINS: '["http://localhost:3000","http://localhost:8000","http://127.0.0.1:3000"]'
+      CORS_ALLOW_CREDENTIALS: "True"
+      CORS_ALLOW_METHODS: '["*"]'
+      CORS_ALLOW_HEADERS: '["*"]'
+
+      # Cloudinary
+      CLOUDINARY_CLOUD_NAME: ${CLOUDINARY_CLOUD_NAME}
+      CLOUDINARY_API_KEY: ${CLOUDINARY_API_KEY}
+      CLOUDINARY_API_SECRET: ${CLOUDINARY_API_SECRET}
+    ports:
+      - "8000:8000"
+    depends_on:
+      db:
+        condition: service_healthy
+      mailhog:
+        condition: service_started
+    networks:
+      - contacts_network
+    volumes:
+      - .:/app
+    restart: unless-stopped
+    command: >
+      sh -c "
+        echo 'Waiting for database...' &&
+        sleep 5 &&
+        echo 'Running migrations...' &&
+        alembic upgrade head &&
+        echo 'Starting application...' &&
+        uvicorn main:app --host 0.0.0.0 --port 8000 --reload
+      "
+
+networks:
+  contacts_network:
+    driver: bridge
 
 volumes:
   postgres_data:
