@@ -26,5 +26,6 @@ class User(BaseModel):
         server_default=expression.text("false"),  # DB-side default
     )
     avatar = mapped_column(String(255), nullable=True)
+    refresh_token = mapped_column(String(500), nullable=True)
 
     contacts = relationship("Contact", back_populates="user", cascade="all, delete-orphan")

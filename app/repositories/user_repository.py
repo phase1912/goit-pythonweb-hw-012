@@ -32,3 +32,23 @@ class UserRepository:
     def exists_by_email(self, email: str) -> bool:
         return self.db.query(User).filter(User.email == email).first() is not None
 
+    def update_refresh_token(self, user_id: int, refresh_token: str) -> User:
+        user = self.get_by_id(user_id)
+        if user:
+            user.refresh_token = refresh_token
+            self.db.commit()
+            self.db.refresh(user)
+        return user
+
+    def verify_refresh_token(self, email: str, refresh_token: str) -> bool:
+        user = self.get_by_email(email)
+        if not user or not user.refresh_token:
+            return False
+        return user.refresh_token == refresh_token
+
+    def clear_refresh_token(self, user_id: int) -> None:
+        user = self.get_by_id(user_id)
+        if user:
+            user.refresh_token = None
+            self.db.commit()
+

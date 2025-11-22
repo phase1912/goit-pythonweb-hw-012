@@ -33,3 +33,12 @@ class UserService:
             return None
         return user
 
+    def save_refresh_token(self, user_id: int, refresh_token: str) -> User:
+        return self.repository.update_refresh_token(user_id, refresh_token)
+
+    def verify_refresh_token(self, email: str, refresh_token: str) -> bool:
+        return self.repository.verify_refresh_token(email, refresh_token)
+
+    def revoke_refresh_token(self, user_id: int) -> None:
+        self.repository.clear_refresh_token(user_id)
+
