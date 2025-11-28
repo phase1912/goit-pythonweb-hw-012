@@ -1,0 +1,3 @@
+# This directory is required by fastapi-mail
+# Keep this file to ensure the directory exists in version control
+

@@ -10,6 +10,7 @@ from app.core.config import settings
 from app.db.database import get_db
 from app.domain.user import User
 from app.schemas.user import TokenData
+from app.services.redis_service import redis_service
 import bcrypt
 
 pwd_context = CryptContext(schemes=["bcrypt"], deprecated="auto")
@@ -121,8 +122,14 @@ def get_current_user(
     except JWTError:
         raise credentials_exception
 
+    cached_user = redis_service.get_user(token_data.email)
+    if cached_user is not None:
+        return cached_user
+
     user = db.query(User).filter(User.email == token_data.email).first()
     if user is None:
         raise credentials_exception
+
+    redis_service.set_user(token_data.email, user)
 
     return user

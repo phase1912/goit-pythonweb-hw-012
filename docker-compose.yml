@@ -31,6 +31,22 @@ services:
       - contacts_network
     restart: unless-stopped
 
+  redis:
+    image: redis:7-alpine
+    container_name: contacts_redis
+    ports:
+      - "6379:6379"
+    networks:
+      - contacts_network
+    healthcheck:
+      test: ["CMD", "redis-cli", "ping"]
+      interval: 10s
+      timeout: 5s
+      retries: 5
+    restart: unless-stopped
+    volumes:
+      - redis_data:/data
+
   api:
     build:
       context: .
@@ -72,10 +88,15 @@ services:
       CLOUDINARY_CLOUD_NAME: ${CLOUDINARY_CLOUD_NAME}
       CLOUDINARY_API_KEY: ${CLOUDINARY_API_KEY}
       CLOUDINARY_API_SECRET: ${CLOUDINARY_API_SECRET}
+
+      # Redis
+      REDIS_URL: redis://redis:6379/0
     ports:
       - "8000:8000"
     depends_on:
       db:
+        condition: service_healthy
+      redis:
         condition: service_healthy
       mailhog:
         condition: service_started
@@ -100,4 +121,5 @@ networks:
 
 volumes:
   postgres_data:
+  redis_data:
 

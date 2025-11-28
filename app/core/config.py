@@ -35,6 +35,10 @@ class Settings(BaseSettings):
     cloudinary_api_key: str = ""
     cloudinary_api_secret: str = ""
 
+    # Redis settings
+    redis_url: str = "redis://localhost:6379/0"
+    redis_cache_ttl: int = 900  # 15 minutes in seconds
+
     class Config:
         env_file = ".env"
 

@@ -20,6 +20,7 @@ from app.core.config import settings
 from app.domain.user import User
 from app.services.email_service import send_verification_email
 from app.services.cloudinary_service import cloudinary_service
+from app.services.redis_service import redis_service
 
 router = APIRouter(prefix="/auth", tags=["auth"])
 
@@ -81,6 +82,8 @@ def login(
 
     service.save_refresh_token(user.id, refresh_token)
 
+    redis_service.set_user(user.email, user)
+
     return Token(
         access_token=access_token,
         refresh_token=refresh_token,
@@ -122,6 +125,8 @@ def refresh_token(
 
     service.save_refresh_token(user.id, new_refresh_token)
 
+    redis_service.delete_user(user.email)
+
     return Token(
         access_token=access_token,
         refresh_token=new_refresh_token,
@@ -135,6 +140,9 @@ def logout(
     service: UserService = Depends(get_user_service)
 ):
     service.revoke_refresh_token(current_user.id)
+
+    redis_service.delete_user(current_user.email)
+
     return None
 
 
@@ -152,6 +160,8 @@ async def verify_email(
                 status_code=status.HTTP_404_NOT_FOUND,
                 detail="User not found"
             )
+
+        redis_service.delete_user(email)
 
         return {
             "message": "Email verified successfully",
@@ -219,5 +229,7 @@ async def update_avatar(
             status_code=status.HTTP_404_NOT_FOUND,
             detail="User not found"
         )
+
+    redis_service.delete_user(current_user.email)
 
     return updated_user
