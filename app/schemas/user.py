@@ -35,3 +35,11 @@ class RefreshTokenRequest(BaseModel):
 class TokenData(BaseModel):
     email: Optional[str] = None
 
+
+class PasswordResetRequest(BaseModel):
+    email: EmailStr
+
+
+class PasswordResetConfirm(BaseModel):
+    token: str
+    new_password: str = Field(..., min_length=6, max_length=100)

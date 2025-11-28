@@ -67,3 +67,14 @@ class UserRepository:
             self.db.commit()
             self.db.refresh(user)
         return user
+
+    def reset_password(self, email: str, new_password: str) -> Optional[User]:
+        user = self.get_by_email(email)
+        if user:
+            hashed_password = get_password_hash(new_password)
+            user.hashed_password = hashed_password
+            user.refresh_token = None
+            self.db.commit()
+            self.db.refresh(user)
+        return user
+

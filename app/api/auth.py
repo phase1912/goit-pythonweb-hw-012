@@ -1,30 +1,37 @@
 from fastapi import APIRouter, Depends, HTTPException, status, BackgroundTasks, Request, UploadFile, File
 from fastapi.security import OAuth2PasswordRequestForm
+from fastapi.responses import HTMLResponse
+from fastapi.templating import Jinja2Templates
 from sqlalchemy.orm import Session
 from datetime import timedelta
+from pathlib import Path
 from slowapi import Limiter
 from slowapi.util import get_remote_address
 
 from app.db.database import get_db
 from app.services.user_service import UserService, UserAlreadyExistsError
-from app.schemas.user import UserCreate, UserResponse, Token, RefreshTokenRequest
+from app.schemas.user import UserCreate, UserResponse, Token, RefreshTokenRequest, PasswordResetRequest, PasswordResetConfirm
 from app.core.security import (
     create_access_token,
     create_refresh_token,
     decode_refresh_token,
     get_current_user,
     create_email_verification_token,
-    verify_email_token
+    verify_email_token,
+    create_password_reset_token,
+    verify_password_reset_token
 )
 from app.core.config import settings
 from app.domain.user import User
-from app.services.email_service import send_verification_email
+from app.services.email_service import send_verification_email, send_password_reset_email
 from app.services.cloudinary_service import cloudinary_service
 from app.services.redis_service import redis_service
 
 router = APIRouter(prefix="/auth", tags=["auth"])
 
 limiter = Limiter(key_func=get_remote_address)
+
+templates = Jinja2Templates(directory=Path(__file__).parent.parent / "services" / "templates")
 
 
 def get_user_service(db: Session = Depends(get_db)) -> UserService:
@@ -233,3 +240,85 @@ async def update_avatar(
     redis_service.delete_user(current_user.email)
 
     return updated_user
+
+
+@router.post("/reset-password-request", status_code=status.HTTP_200_OK)
+async def request_password_reset(
+    request_data: PasswordResetRequest,
+    background_tasks: BackgroundTasks,
+    service: UserService = Depends(get_user_service)
+):
+    user = service.get_user_by_email(request_data.email)
+
+    if user:
+        reset_token = create_password_reset_token(user.email)
+
+        background_tasks.add_task(
+            send_password_reset_email,
+            user.email,
+            user.first_name or user.email.split('@')[0],
+            reset_token
+        )
+
+    return {
+        "message": "If the email exists, a password reset link has been sent"
+    }
+
+
+@router.get("/reset-password/{token}", response_class=HTMLResponse)
+async def reset_password_page(
+    request: Request,
+    token: str,
+    service: UserService = Depends(get_user_service)
+):
+    try:
+        email = verify_password_reset_token(token)
+
+        return templates.TemplateResponse(
+            "reset_password.html",
+            {
+                "request": request,
+                "token": token,
+                "frontend_url": f"{settings.backend_url}/docs#/auth/login_auth_login_post"
+            }
+        )
+
+    except HTTPException as e:
+        return templates.TemplateResponse(
+            "reset_password_error.html",
+            {
+                "request": request,
+                "frontend_url": f"{settings.backend_url}/docs#/auth/login_auth_login_post"
+            },
+            status_code=400
+        )
+
+
+@router.post("/reset-password-confirm", status_code=status.HTTP_200_OK)
+async def confirm_password_reset(
+    reset_data: PasswordResetConfirm,
+    service: UserService = Depends(get_user_service)
+):
+    try:
+        email = verify_password_reset_token(reset_data.token)
+
+        user = service.reset_password(email, reset_data.new_password)
+        if not user:
+            raise HTTPException(
+                status_code=status.HTTP_404_NOT_FOUND,
+                detail="User not found"
+            )
+
+        redis_service.delete_user(user.email)
+        redis_service.set_password_change_timestamp(user.email)
+
+        return {
+            "message": "Password has been reset successfully. Please login with your new password. All existing sessions have been invalidated."
+        }
+    except HTTPException:
+        raise
+    except Exception as e:
+        raise HTTPException(
+            status_code=status.HTTP_400_BAD_REQUEST,
+            detail="Failed to reset password"
+        )

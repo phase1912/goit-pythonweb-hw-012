@@ -10,6 +10,7 @@ requests
 passlib[bcrypt]
 python-jose[cryptography]
 python-multipart
+python-dateutil
 alembic
 fastapi-mail
 jinja2

@@ -1,6 +1,7 @@
 import redis
 import pickle
 from typing import Optional, Any
+from datetime import datetime
 from app.core.config import settings
 
 
@@ -33,6 +34,12 @@ class RedisService:
 
     def _get_user_cache_key(self, email: str) -> str:
         return f"user:{email}"
+
+    def _get_token_blacklist_key(self, token: str) -> str:
+        return f"blacklist:token:{token}"
+
+    def _get_user_password_change_key(self, email: str) -> str:
+        return f"password_changed:{email}"
 
     def get_user(self, email: str) -> Optional[Any]:
         if not self._is_available():
@@ -85,6 +92,58 @@ class RedisService:
             print(f"Error deleting user from cache: {e}")
             return False
 
+    def blacklist_token(self, token: str, ttl: int) -> bool:
+        if not self._is_available():
+            return False
+
+        try:
+            key = self._get_token_blacklist_key(token)
+            self.redis_client.setex(key, ttl, "1")
+            print(f"✓ Token blacklisted (TTL: {ttl}s)")
+            return True
+        except Exception as e:
+            print(f"Error blacklisting token: {e}")
+            return False
+
+    def is_token_blacklisted(self, token: str) -> bool:
+        if not self._is_available():
+            return False
+
+        try:
+            key = self._get_token_blacklist_key(token)
+            return self.redis_client.exists(key) > 0
+        except Exception as e:
+            print(f"Error checking token blacklist: {e}")
+            return False
+
+    def set_password_change_timestamp(self, email: str) -> bool:
+        if not self._is_available():
+            return False
+
+        try:
+            key = self._get_user_password_change_key(email)
+            timestamp = datetime.utcnow().isoformat()
+            self.redis_client.set(key, timestamp)
+            print(f"✓ Password change timestamp set for: {email}")
+            return True
+        except Exception as e:
+            print(f"Error setting password change timestamp: {e}")
+            return False
+
+    def get_password_change_timestamp(self, email: str) -> Optional[str]:
+        if not self._is_available():
+            return None
+
+        try:
+            key = self._get_user_password_change_key(email)
+            timestamp = self.redis_client.get(key)
+            if timestamp:
+                return timestamp.decode('utf-8') if isinstance(timestamp, bytes) else timestamp
+            return None
+        except Exception as e:
+            print(f"Error getting password change timestamp: {e}")
+            return None
+
     def clear_all_cache(self) -> bool:
         if not self._is_available():
             return False
@@ -100,4 +159,3 @@ class RedisService:
 
 # Singleton instance
 redis_service = RedisService()
-

@@ -47,3 +47,7 @@ class UserService:
 
     def update_avatar(self, user_id: int, avatar_url: str) -> Optional[User]:
         return self.repository.update_avatar(user_id, avatar_url)
+
+    def reset_password(self, email: str, new_password: str) -> Optional[User]:
+        return self.repository.reset_password(email, new_password)
+
