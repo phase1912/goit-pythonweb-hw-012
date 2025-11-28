@@ -7,10 +7,40 @@ from app.core.security import get_password_hash
 
 
 class UserRepository:
+    """
+    Repository for user data access operations.
+
+    This class handles all database operations related to users,
+    including CRUD operations, authentication, and profile management.
+
+    Attributes:
+        db (Session): SQLAlchemy database session.
+    """
+
     def __init__(self, db: Session):
+        """
+        Initialize the UserRepository.
+
+        Args:
+            db (Session): SQLAlchemy database session.
+        """
         self.db = db
 
     def create(self, user_data: UserCreate) -> User:
+        """
+        Create a new user in the database.
+
+        Args:
+            user_data (UserCreate): User registration data containing email, password, and optional names.
+
+        Returns:
+            User: The newly created user object.
+
+        Note:
+            - Password is automatically hashed before storing.
+            - Default role is USER.
+            - Email verification is required (is_confirmed = False by default).
+        """
         hashed_password = get_password_hash(user_data.password)
         user = User(
             email=user_data.email,

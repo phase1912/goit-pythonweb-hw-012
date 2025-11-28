@@ -20,20 +20,67 @@ oauth2_scheme = OAuth2PasswordBearer(tokenUrl="/auth/login")
 
 
 def verify_password(plain_password: str, hashed_password: str) -> bool:
-    #return pwd_context.verify(plain_password, hashed_password)
+    """
+    Verify a plain text password against a hashed password.
+
+    Args:
+        plain_password (str): The plain text password to verify.
+        hashed_password (str): The bcrypt hashed password to check against.
+
+    Returns:
+        bool: True if the password matches, False otherwise.
+
+    Example:
+        >>> verify_password("mypassword", "$2b$14$...")
+        True
+    """
     password = plain_password.encode("utf-8")
     hashed = hashed_password.encode("utf-8")
     return bcrypt.checkpw(password, hashed)
 
 
 def get_password_hash(password: str) -> str:
-    #return pwd_context.hash(password)
+    """
+    Hash a plain text password using bcrypt.
+
+    Args:
+        password (str): The plain text password to hash.
+
+    Returns:
+        str: The bcrypt hashed password.
+
+    Note:
+        Uses bcrypt with cost factor of 14 for enhanced security.
+
+    Example:
+        >>> get_password_hash("mypassword")
+        '$2b$14$...'
+    """
     hashed = bcrypt.hashpw(password.encode("utf-8"), bcrypt.gensalt(14))
     print("Hash generated:", hashed)
     return hashed.decode("utf-8")
 
 
 def create_access_token(data: dict, expires_delta: Optional[timedelta] = None) -> str:
+    """
+    Create a JWT access token.
+
+    Args:
+        data (dict): The payload data to encode in the token (typically contains 'sub' with user email).
+        expires_delta (Optional[timedelta]): Custom expiration time. If None, uses default from settings.
+
+    Returns:
+        str: The encoded JWT access token.
+
+    Note:
+        - Includes 'iat' (issued at) timestamp for token invalidation tracking.
+        - Token type is set to 'access' to distinguish from refresh tokens.
+        - Default expiration: 30 minutes.
+
+    Example:
+        >>> create_access_token({"sub": "user@example.com"})
+        'eyJhbGciOiJIUzI1NiIs...'
+    """
     to_encode = data.copy()
     now = datetime.utcnow()
     if expires_delta:
@@ -141,6 +188,38 @@ def get_current_user(
     token: str = Depends(oauth2_scheme),
     db: Session = Depends(get_db)
 ) -> User:
+    """
+    Get the current authenticated user from the JWT access token.
+
+    This dependency validates the access token, checks for token blacklisting,
+    verifies password changes, and returns the user object. Uses Redis caching
+    for improved performance.
+
+    Args:
+        token (str): The JWT access token from the Authorization header.
+        db (Session): Database session dependency.
+
+    Returns:
+        User: The authenticated user object.
+
+    Raises:
+        HTTPException:
+            - 401 if token is invalid, expired, blacklisted, or invalidated by password change.
+            - 401 if user not found in database.
+
+    Note:
+        - Checks Redis cache first for performance.
+        - Validates token hasn't been invalidated due to password change.
+        - Caches user object in Redis for subsequent requests.
+
+    Example:
+        Used as FastAPI dependency:
+        ```python
+        @router.get("/protected")
+        def protected_route(current_user: User = Depends(get_current_user)):
+            return {"user": current_user.email}
+        ```
+    """
     credentials_exception = HTTPException(
         status_code=status.HTTP_401_UNAUTHORIZED,
         detail="Could not validate credentials",
@@ -194,6 +273,28 @@ def get_current_user(
 def get_current_admin_user(
     current_user: User = Depends(get_current_user)
 ) -> User:
+    """
+    Require admin role for the current user.
+
+    This dependency ensures only users with ADMIN role can access the endpoint.
+
+    Args:
+        current_user (User): The authenticated user from get_current_user dependency.
+
+    Returns:
+        User: The admin user object.
+
+    Raises:
+        HTTPException: 403 Forbidden if user doesn't have ADMIN role.
+
+    Example:
+        ```python
+        @router.patch("/avatar")
+        def update_avatar(admin: User = Depends(get_current_admin_user)):
+            # Only admins can access this
+            pass
+        ```
+    """
     if current_user.role != UserRoles.ADMIN:
         raise HTTPException(
             status_code=status.HTTP_403_FORBIDDEN,
@@ -203,6 +304,27 @@ def get_current_admin_user(
 
 
 def require_role(required_role: UserRoles):
+    """
+    Create a dependency that requires a specific user role.
+
+    This is a dependency factory that creates role-checking dependencies.
+
+    Args:
+        required_role (UserRoles): The role required to access the endpoint.
+
+    Returns:
+        function: A FastAPI dependency function that checks for the required role.
+
+    Raises:
+        HTTPException: 403 Forbidden if user doesn't have the required role.
+
+    Example:
+        ```python
+        @router.get("/admin-only", dependencies=[Depends(require_role(UserRoles.ADMIN))])
+        def admin_endpoint():
+            return {"message": "Admin only"}
+        ```
+    """
     def role_checker(current_user: User = Depends(get_current_user)) -> User:
         if current_user.role != required_role:
             raise HTTPException(
