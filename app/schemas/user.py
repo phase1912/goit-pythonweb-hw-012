@@ -1,5 +1,6 @@
 from pydantic import BaseModel, EmailStr, Field
 from typing import Optional
+from app.domain.enums import UserRoles
 
 
 class UserBase(BaseModel):
@@ -18,6 +19,7 @@ class UserResponse(UserBase):
     last_name: Optional[str] = None
     avatar: Optional[str] = None
     is_confirmed: bool
+    role: UserRoles
 
     model_config = {"from_attributes": True}
 

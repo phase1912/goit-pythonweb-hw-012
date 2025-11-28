@@ -9,6 +9,7 @@ from sqlalchemy.orm import Session
 from app.core.config import settings
 from app.db.database import get_db
 from app.domain.user import User
+from app.domain.enums import UserRoles
 from app.schemas.user import TokenData
 from app.services.redis_service import redis_service
 from dateutil import parser
@@ -188,3 +189,25 @@ def get_current_user(
     redis_service.set_user(token_data.email, user)
 
     return user
+
+
+def get_current_admin_user(
+    current_user: User = Depends(get_current_user)
+) -> User:
+    if current_user.role != UserRoles.ADMIN:
+        raise HTTPException(
+            status_code=status.HTTP_403_FORBIDDEN,
+            detail="Access denied. Admin privileges required."
+        )
+    return current_user
+
+
+def require_role(required_role: UserRoles):
+    def role_checker(current_user: User = Depends(get_current_user)) -> User:
+        if current_user.role != required_role:
+            raise HTTPException(
+                status_code=status.HTTP_403_FORBIDDEN,
+                detail=f"Access denied. {required_role.value} role required."
+            )
+        return current_user
+    return role_checker

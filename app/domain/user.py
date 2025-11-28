@@ -17,8 +17,8 @@ class User(BaseModel):
     role: Mapped[UserRoles] = mapped_column(
         SQLAlchemyEnum(UserRoles),
         nullable=False,
-        default=UserRoles.ADMIN.value,
-        server_default=UserRoles.ADMIN.value,
+        default=UserRoles.USER.value,
+        server_default=UserRoles.USER.value,
     )
     is_confirmed = mapped_column(
         Boolean,

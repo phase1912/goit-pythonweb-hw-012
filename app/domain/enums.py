@@ -8,6 +8,5 @@ class AutoName(Enum):
 
 
 class UserRoles(AutoName):
+    USER = auto()
     ADMIN = auto()
-    MANAGER = auto()
-    EMPLOYEE = auto()

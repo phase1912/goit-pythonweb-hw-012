@@ -16,6 +16,7 @@ from app.core.security import (
     create_refresh_token,
     decode_refresh_token,
     get_current_user,
+    get_current_admin_user,
     create_email_verification_token,
     verify_email_token,
     create_password_reset_token,
@@ -224,7 +225,7 @@ async def read_users_me(
 @router.patch("/avatar", response_model=UserResponse)
 async def update_avatar(
     file: UploadFile = File(...),
-    current_user: User = Depends(get_current_user),
+    current_user: User = Depends(get_current_admin_user),
     service: UserService = Depends(get_user_service)
 ):
     avatar_url = await cloudinary_service.upload_avatar(file, current_user.id)
