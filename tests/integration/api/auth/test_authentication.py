@@ -64,7 +64,7 @@ async def test_login_success(unauthenticated_client: AsyncClient, test_user) -> 
     """Test successful user login."""
     login_data = {
         "username": test_user.email,
-        "password": "testpassword123"
+        "password": "SecurePass123!"
     }
 
     response = await unauthenticated_client.post(url=Urls.AUTH_LOGIN, data=login_data)

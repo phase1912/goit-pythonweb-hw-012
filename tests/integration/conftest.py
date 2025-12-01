@@ -5,23 +5,23 @@ import pytest
 from httpx import AsyncClient, ASGITransport
 from sqlalchemy import create_engine
 from sqlalchemy.orm import sessionmaker
+from datetime import timedelta, date
+from unittest.mock import AsyncMock
+from fastapi import FastAPI
 
 from app.domain.base import BaseModel
 from app.domain.user import User
 from app.domain.contact import Contact
 from app.domain.enums import UserRoles
 from app.core.security import get_password_hash, create_access_token
-from datetime import timedelta, date
-
-# Use in-memory SQLite for testing
-SQLALCHEMY_DATABASE_URL = "sqlite:///:memory:"
+from tests.conftest import TestSettings
 
 
 @pytest.fixture(scope="function")
-def db_engine():
+def db_engine(test_settings: TestSettings):
     """Create a test database engine."""
     engine = create_engine(
-        SQLALCHEMY_DATABASE_URL,
+        test_settings.database_url,
         connect_args={"check_same_thread": False}
     )
     BaseModel.metadata.create_all(bind=engine)
@@ -31,7 +31,7 @@ def db_engine():
 
 
 @pytest.fixture(scope="function")
-def db_session(db_engine):
+def test_db(db_engine):
     """Create a test database session."""
     TestingSessionLocal = sessionmaker(
         autocommit=False,
@@ -46,7 +46,7 @@ def db_session(db_engine):
 
 
 @pytest.fixture
-def test_user(db_session):
+def test_user(test_db):
     """Create a test user in the database."""
     user = User(
         email="test@example.com",
@@ -56,14 +56,14 @@ def test_user(db_session):
         role=UserRoles.USER,
         is_confirmed=True
     )
-    db_session.add(user)
-    db_session.commit()
-    db_session.refresh(user)
+    test_db.add(user)
+    test_db.commit()
+    test_db.refresh(user)
     return user
 
 
 @pytest.fixture
-def test_admin(db_session):
+def test_admin(test_db):
     """Create a test admin user in the database."""
     admin = User(
         email="admin@example.com",
@@ -73,14 +73,14 @@ def test_admin(db_session):
         role=UserRoles.ADMIN,
         is_confirmed=True
     )
-    db_session.add(admin)
-    db_session.commit()
-    db_session.refresh(admin)
+    test_db.add(admin)
+    test_db.commit()
+    test_db.refresh(admin)
     return admin
 
 
 @pytest.fixture
-def test_contact(db_session, test_user):
+def test_contact(test_db, test_user):
     """Create a test contact in the database."""
     contact = Contact(
         first_name="John",
@@ -91,97 +91,82 @@ def test_contact(db_session, test_user):
         additional_data="Test contact",
         user_id=test_user.id
     )
-    db_session.add(contact)
-    db_session.commit()
-    db_session.refresh(contact)
+    test_db.add(contact)
+    test_db.commit()
+    test_db.refresh(contact)
     return contact
 
 
 @pytest.fixture(scope="function")
-async def unauthenticated_client(db_session):
-    """Create an unauthenticated async test client."""
+def test_app(test_db, test_settings: TestSettings) -> FastAPI:
+    """Create test FastAPI application with overridden dependencies."""
     from main import app
     from app.db.database import get_db
+    from app.core.config import settings
 
     def override_get_db():
+        """Override database for tests."""
         try:
-            yield db_session
+            yield test_db
         finally:
             pass
 
+    def override_get_settings():
+        """Override settings for tests."""
+        return test_settings
+
+    # Override the FastAPI app's dependencies
     app.dependency_overrides[get_db] = override_get_db
 
-    async with AsyncClient(
-        transport=ASGITransport(app=app),
-        base_url="http://test"
-    ) as client:
-        yield client
+    yield app
 
+    # Clean up overrides after test
     app.dependency_overrides.clear()
 
 
 @pytest.fixture(scope="function")
-async def authenticated_client(db_session, test_user, mock_redis_service):
+def unauthenticated_client(test_app: FastAPI) -> AsyncClient:
+    """Create an unauthenticated async test client."""
+    return AsyncClient(
+        transport=ASGITransport(app=test_app),
+        base_url="http://test"
+    )
+
+
+@pytest.fixture(scope="function")
+def authenticated_client(test_app: FastAPI, test_user, test_settings: TestSettings, mock_redis_service) -> AsyncClient:
     """Create an authenticated async test client."""
-    from main import app
-    from app.db.database import get_db
-
-    def override_get_db():
-        try:
-            yield db_session
-        finally:
-            pass
-
-    app.dependency_overrides[get_db] = override_get_db
-
     # Mock redis to return the test user
     mock_redis_service.get_user.return_value = test_user
 
     access_token = create_access_token(
         data={"sub": test_user.email},
-        expires_delta=timedelta(minutes=30)
+        expires_delta=timedelta(minutes=test_settings.access_token_expire_minutes)
     )
 
-    async with AsyncClient(
-        transport=ASGITransport(app=app),
+    return AsyncClient(
+        transport=ASGITransport(app=test_app),
         base_url="http://test",
         headers={"Authorization": f"Bearer {access_token}"}
-    ) as client:
-        yield client
-
-    app.dependency_overrides.clear()
+    )
 
 
 @pytest.fixture(scope="function")
-async def admin_client(db_session, test_admin, mock_redis_service):
+def admin_client(test_app: FastAPI, test_admin, test_settings: TestSettings, mock_redis_service) -> AsyncClient:
     """Create an admin authenticated async test client."""
-    from main import app
-    from app.db.database import get_db
-
-    def override_get_db():
-        try:
-            yield db_session
-        finally:
-            pass
-
-    app.dependency_overrides[get_db] = override_get_db
-
     # Mock redis to return the test admin
     mock_redis_service.get_user.return_value = test_admin
 
     access_token = create_access_token(
         data={"sub": test_admin.email},
-        expires_delta=timedelta(minutes=30)
+        expires_delta=timedelta(minutes=test_settings.access_token_expire_minutes)
     )
 
-    async with AsyncClient(
-        transport=ASGITransport(app=app),
+    return AsyncClient(
+        transport=ASGITransport(app=test_app),
         base_url="http://test",
         headers={"Authorization": f"Bearer {access_token}"}
-    ) as client:
-        yield client
-
-    app.dependency_overrides.clear()
+    )
 
 
 @pytest.fixture(autouse=True)
