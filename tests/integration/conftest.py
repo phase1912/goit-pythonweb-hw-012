@@ -6,7 +6,6 @@ from httpx import AsyncClient, ASGITransport
 from sqlalchemy import create_engine
 from sqlalchemy.orm import sessionmaker
 from datetime import timedelta, date
-from unittest.mock import AsyncMock
 from fastapi import FastAPI
 
 from app.domain.base import BaseModel
@@ -19,13 +18,20 @@ from tests.conftest import TestSettings
 
 @pytest.fixture(scope="function")
 def db_engine(test_settings: TestSettings):
-    """Create a test database engine."""
+    """Create a test database engine and clean up before each test."""
     engine = create_engine(
         test_settings.database_url,
         connect_args={"check_same_thread": False}
     )
+
+    # Drop all tables before creating new ones (ensures clean state)
+    BaseModel.metadata.drop_all(bind=engine)
+    # Create all tables fresh
     BaseModel.metadata.create_all(bind=engine)
+
     yield engine
+
+    # Cleanup after test
     BaseModel.metadata.drop_all(bind=engine)
     engine.dispose()
 
@@ -98,11 +104,10 @@ def test_contact(test_db, test_user):
 
 
 @pytest.fixture(scope="function")
-def test_app(test_db, test_settings: TestSettings) -> FastAPI:
+def test_app(test_db, test_settings: TestSettings):
     """Create test FastAPI application with overridden dependencies."""
     from main import app
     from app.db.database import get_db
-    from app.core.config import settings
 
     def override_get_db():
         """Override database for tests."""
@@ -111,9 +116,6 @@ def test_app(test_db, test_settings: TestSettings) -> FastAPI:
         finally:
             pass
 
-    def override_get_settings():
-        """Override settings for tests."""
-        return test_settings
 
     # Override the FastAPI app's dependencies
     app.dependency_overrides[get_db] = override_get_db
@@ -125,16 +127,17 @@ def test_app(test_db, test_settings: TestSettings) -> FastAPI:
 
 
 @pytest.fixture(scope="function")
-def unauthenticated_client(test_app: FastAPI) -> AsyncClient:
+async def unauthenticated_client(test_app: FastAPI):
     """Create an unauthenticated async test client."""
-    return AsyncClient(
+    async with AsyncClient(
         transport=ASGITransport(app=test_app),
         base_url="http://test"
-    )
+    ) as client:
+        yield client
 
 
 @pytest.fixture(scope="function")
-def authenticated_client(test_app: FastAPI, test_user, test_settings: TestSettings, mock_redis_service) -> AsyncClient:
+async def authenticated_client(test_app: FastAPI, test_user, test_settings: TestSettings, mock_redis_service):
     """Create an authenticated async test client."""
     # Mock redis to return the test user
     mock_redis_service.get_user.return_value = test_user
@@ -144,15 +147,16 @@ def authenticated_client(test_app: FastAPI, test_user, test_settings: TestSettin
         expires_delta=timedelta(minutes=test_settings.access_token_expire_minutes)
     )
 
-    return AsyncClient(
+    async with AsyncClient(
         transport=ASGITransport(app=test_app),
         base_url="http://test",
         headers={"Authorization": f"Bearer {access_token}"}
-    )
+    ) as client:
+        yield client
 
 
 @pytest.fixture(scope="function")
-def admin_client(test_app: FastAPI, test_admin, test_settings: TestSettings, mock_redis_service) -> AsyncClient:
+async def admin_client(test_app: FastAPI, test_admin, test_settings: TestSettings, mock_redis_service):
     """Create an admin authenticated async test client."""
     # Mock redis to return the test admin
     mock_redis_service.get_user.return_value = test_admin
@@ -162,11 +166,12 @@ def admin_client(test_app: FastAPI, test_admin, test_settings: TestSettings, moc
         expires_delta=timedelta(minutes=test_settings.access_token_expire_minutes)
     )
 
-    return AsyncClient(
+    async with AsyncClient(
         transport=ASGITransport(app=test_app),
         base_url="http://test",
         headers={"Authorization": f"Bearer {access_token}"}
-    )
+    ) as client:
+        yield client
 
 
 @pytest.fixture(autouse=True)
@@ -180,6 +185,8 @@ def mock_redis_service(monkeypatch):
     mock_redis.delete_user = MagicMock()
     mock_redis.set_password_change_timestamp = MagicMock()
     mock_redis.get_password_change_timestamp = MagicMock(return_value=None)
+    mock_redis.is_token_blacklisted = MagicMock(return_value=False)  # Token is not blacklisted
+    mock_redis.blacklist_token = MagicMock()
 
     monkeypatch.setattr("app.services.redis_service.redis_service", mock_redis)
     monkeypatch.setattr("app.api.auth.redis_service", mock_redis)
