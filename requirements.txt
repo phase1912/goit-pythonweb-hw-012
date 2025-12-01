@@ -19,3 +19,11 @@ redis
 cloudinary
 pillow
 
+
+# Testing dependencies
+pytest
+pytest-asyncio
+pytest-cov
+pytest-mock
+httpx
+faker
