@@ -1,5 +1,5 @@
 """
-Pytest configuration and shared fixtures for testing.
+Pytest configuration and shared fixtures for unit testing.
 """
 import pytest
 from sqlalchemy import create_engine
@@ -121,3 +121,8 @@ def multiple_contacts(db_session, test_user):
 
     return contacts
 
+@pytest.fixture(scope="session")
+def anyio_backend() -> str:
+    """Set anyio backend to asyncio."""
+    print("\n--> execute 'anyio_backend' fixture")
+    return "asyncio"

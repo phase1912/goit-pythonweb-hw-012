@@ -23,6 +23,8 @@ pillow
 # Testing dependencies
 pytest
 pytest-asyncio
+pytest-anyio
+anyio
 pytest-cov
 pytest-mock
 httpx
